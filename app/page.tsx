@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateSalary, endTime, formatCurrency, formatHours, hoursMinutes } from "@/lib/calculations";
+import type { OccupationMatch, SalaryResult } from "@/lib/salary-provider";
 
 const currencies = ["CAD", "USD", "GBP", "EUR", "AUD", "OTHER"];
 const number = (value: string) => Math.max(0, Number(value) || 0);
@@ -23,6 +24,9 @@ export default function Home() {
   const [location, setLocation] = useState("");
   const [years, setYears] = useState("");
   const [lookup, setLookup] = useState("");
+  const [occupationMatches, setOccupationMatches] = useState<OccupationMatch[]>([]);
+  const [salaryResults, setSalaryResults] = useState<SalaryResult[]>([]);
+  const [selectedOccupation, setSelectedOccupation] = useState("");
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -40,11 +44,22 @@ export default function Home() {
   const result = calculations[0];
 
   async function findSalary(event: FormEvent) {
-    event.preventDefault(); setLookup("Dialing salary data providers...");
-    const response = await fetch(`/api/salary?jobTitle=${encodeURIComponent(job)}&location=${encodeURIComponent(location)}&currency=${currency}&years=${years}`);
+    event.preventDefault(); setLookup("Matching your title to an official occupation..."); setSalaryResults([]);
+    const response = await fetch(`/api/salary/occupations?jobTitle=${encodeURIComponent(job)}&location=${encodeURIComponent(location)}`);
     const data = await response.json();
-    setLookup(data.message || data.error || `${data.results.length} estimate(s) found.`);
+    setOccupationMatches(data.matches || []); setSelectedOccupation("");
+    setLookup(data.message || data.error || "Choose the occupation that best matches your work.");
   }
+
+  async function retrieveSalary(match: OccupationMatch) {
+    setSelectedOccupation(match.code); setLookup("Calling government wage data..."); setSalaryResults([]);
+    const response = await fetch("/api/salary/search", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ occupation: match, location, hoursPerWeek: number(hours) * number(days), weeksPerYear: number(weeks) }) });
+    const data = await response.json(); setSalaryResults(data.results || []);
+    const count = data.results?.length || 0;
+    setLookup(data.message || `${count} transparent salary estimate${count === 1 ? "" : "s"} found.`);
+  }
+
+  const usableSalary = (estimate: SalaryResult) => estimate.period === "hourly" ? estimate.annualized?.median : estimate.median;
 
   function share() {
     const p = new URLSearchParams({ salary, target: targets.join(","), hours, days, currency });
@@ -76,7 +91,10 @@ export default function Home() {
             <label>Job title<input required value={job} placeholder="Software Development Manager" onChange={e => setJob(e.target.value)} /></label>
             <label>City / region / country<input required value={location} placeholder="Vancouver, BC, Canada" onChange={e => setLocation(e.target.value)} /></label>
             <label>Years in role (optional)<input type="number" min="0" value={years} onChange={e => setYears(e.target.value)} /></label>
-          </div><button type="submit">Find my market rate</button>{lookup && <p className="status" role="status">{lookup}</p>}</form>
+          </div><button type="submit">Find government wage data</button>{lookup && <p className="status" role="status">{lookup}</p>}
+          {occupationMatches.length > 0 && <fieldset className="occupation-list"><legend>We found these possible occupations. Which best matches your job?</legend>{occupationMatches.map((match) => <button type="button" className={selectedOccupation === match.code ? "selected" : ""} key={match.code} onClick={() => retrieveSalary(match)}><b>{match.title}</b><small>{match.code} · {Math.round(match.confidence * 100)}% title match</small></button>)}</fieldset>}
+          {salaryResults.length > 0 && <div className="salary-data"><h3>Salary data found</h3>{(["government", "market"] as const).map((category) => { const group = salaryResults.filter((item) => item.category === category); return group.length > 0 && <section key={category}><h4>{category === "government" ? "Government data" : "Market data"}</h4>{group.map((estimate, index) => { const annual = usableSalary(estimate); return <article key={`${estimate.providerId}-${index}`}><div><b>{estimate.provider}</b><strong>{annual ? formatCurrency(annual, estimate.currency) : "Median unavailable"}</strong></div><p>{estimate.occupationTitle}{estimate.occupationCode && ` (${estimate.occupationCode})`}<br/>{estimate.location} · {estimate.dataYear || estimate.dataDate || "Current retrieved data"}<br/>Base salary · {estimate.period}{estimate.annualized && ` · Annualized at ${estimate.annualized.hoursPerWeek} hours/week × ${estimate.annualized.weeksPerYear} weeks`}{estimate.geographyNote && <><br/>{estimate.geographyNote}</>}</p>{estimate.sourceUrl && <a href={estimate.sourceUrl} target="_blank" rel="noreferrer">Official source</a>} {annual && <button type="button" onClick={() => setTargets([String(Math.round(annual)), ...targets.slice(1)])}>Use {formatCurrency(annual, estimate.currency)}</button>}</article>})}</section>})}<button type="button" onClick={() => document.querySelector<HTMLInputElement>(".wide-label input")?.focus()}>Enter my own</button></div>}
+          </form>
         </section>
 
         <details className="window advanced"><summary>⚙ Advanced settings</summary><div className="form-grid">
