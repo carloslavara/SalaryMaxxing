@@ -1,23 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { matchOccupations, normalizeTitle } from "./occupation-matcher";
-import { annualize, parseLocation } from "./salary-provider";
+import { normalizeCountry, parseLocation, parseNumeric } from "./salary-provider";
 
-describe("occupation matching", () => {
-  it("normalizes punctuation and capitalization", () => expect(normalizeTitle("Software-Development Manager! ")).toBe("software development manager"));
-  it("offers the expected government management occupation first", () => {
-    const canada = matchOccupations("Software Development Manager", "CA", "job-bank");
-    const us = matchOccupations("Software Development Manager", "US", "bls-oews");
-    expect(canada[0]).toMatchObject({ code: "20012", providerId: "job-bank" });
-    expect(us[0]).toMatchObject({ code: "11-3021", providerId: "bls-oews" });
-    expect(canada.length).toBeGreaterThan(1);
+describe("country-specific occupation matching", () => {
+  it("normalizes punctuation and only returns SOC matches for the US", () => {
+    expect(normalizeTitle("Software-Development Manager! ")).toBe("software development manager");
+    const matches = matchOccupations("Software Development Manager", "US");
+    expect(matches[0]).toMatchObject({ code: "11-3021", country: "US", classification: "SOC" });
+    expect(matches.every((match) => match.classification === "SOC")).toBe(true);
   });
+  it("only returns NOC matches for Canada", () => expect(matchOccupations("Software Development Manager", "CA")[0]).toMatchObject({ code: "20012", country: "CA", classification: "NOC" }));
 });
 
-describe("salary lookup helpers", () => {
-  it("identifies supported countries", () => {
-    expect(parseLocation("Vancouver, BC, Canada").country).toBe("CA");
-    expect(parseLocation("Seattle, WA, United States").country).toBe("US");
-    expect(parseLocation("San Francisco, CA").country).toBe("OTHER");
+describe("input normalization", () => {
+  it("normalizes supported country spellings", () => {
+    for (const input of ["United States", "United States of America", "USA", "US", "U.S."]) expect(normalizeCountry(input)).toBe("US");
+    for (const input of ["Canada", "CA", "CAN"]) expect(normalizeCountry(input)).toBe("CA");
+    expect(parseLocation("Austin, TX, United States")).toEqual({ city: "Austin", region: "TX", country: "US" });
   });
-  it("annualizes hourly government wages using the configured schedule", () => expect(annualize(72.12, 40, 52)).toBeCloseTo(150009.6));
+  it("safely rejects suppressed wage values", () => {
+    for (const input of ["*", "**", "#", "N/A", "—", null, ""]) expect(parseNumeric(input)).toBeUndefined();
+  });
 });

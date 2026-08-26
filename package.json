@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "update:oews": "node scripts/update-salary-data.mjs us",
+    "update:jobbank": "node scripts/update-salary-data.mjs ca",
+    "update:salary-data": "npm run update:oews && npm run update:jobbank"
   },
   "dependencies": {
     "next": "^15.5.9",

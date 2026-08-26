@@ -10,11 +10,11 @@ Manual target entry is always available. Government sources are selected first b
 - United States → BLS OEWS (SOC 2018)
 - Other/ambiguous countries → manual entry
 
-Job Bank and OEWS distribute official wage data through bulk releases rather than a stable title-search API. To avoid scraping their presentation websites, set `JOB_BANK_DATA_URL` and/or `BLS_OEWS_DATA_URL` to an approved normalized JSON adapter backed by the agencies' current bulk data. The server adds `occupationCode` and `location` query parameters and caches successful requests for 24 hours.
+Job Bank and OEWS distribute official wage data through bulk releases rather than one stable API for every occupation/geography combination. SalaryMaxxing therefore reads normalized, server-only JSON snapshots from `data/salary`; runtime lookups never call a government website or download a spreadsheet.
 
-The adapter returns an array of salary records using the `SalaryResult` fields from `lib/salary-provider.ts` (excluding server-populated provider metadata). It should return available geographies together; SalaryMaxxing selects metro, then province/state, then national data and labels any fallback. Hourly Job Bank results are annualized using the schedule submitted by the calculator.
+The separate country pipelines select metro → state → national for OEWS and economic region → province → national for Job Bank. Hourly Job Bank results are annualized using the schedule submitted by the calculator, and the UI labels the conversion.
 
-Adzuna is optional secondary market context. Configure `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`; credentials remain in the Route Handler and are never sent to the browser. Government and market estimates remain separate and are never averaged.
+To refresh a snapshot, download an official CSV extract, set `OEWS_SOURCE_CSV` or `JOB_BANK_SOURCE_CSV` to its local path (or official download URL), and run `npm run update:oews` or `npm run update:jobbank`. `npm run update:salary-data` runs both imports. The ingestion script handles quoted CSV fields and suppressed values, trims unused columns, and writes geography-specific application data.
 
 See `.env.example` for configuration.
 
@@ -25,3 +25,5 @@ npm install
 npm test
 npm run build
 ```
+
+`POST /api/salary/search` is the sole wage-result endpoint. In development it includes lookup diagnostics on errors; production diagnostics are written only to server logs.

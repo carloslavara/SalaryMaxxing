@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { providersFor } from "@/lib/providers";
+import { providerFor } from "@/lib/providers";
 import { parseLocation } from "@/lib/salary-provider";
 
 /**
@@ -19,18 +19,15 @@ export async function GET(request: NextRequest) {
   }
 
   const location = parseLocation(rawLocation);
-  const governmentProvider = providersFor(location.country).find(
-    (provider) => provider.category === "government",
-  );
-  const matches = governmentProvider
-    ? await governmentProvider.searchOccupations(jobTitle)
-    : [];
+  if (!location) return NextResponse.json({ results: [], matches: [], message: "Unsupported or ambiguous country." }, { status: 400 });
+  const governmentProvider = providerFor(location.country);
+  const matches = await governmentProvider.searchOccupations(jobTitle);
 
   return NextResponse.json({
     results: [],
     matches,
     country: location.country,
-    provider: governmentProvider?.name,
+    provider: governmentProvider.name,
     message: matches.length
       ? "Choose an occupation, then submit it to /api/salary/search."
       : "No government occupation match was found. Manual target entry remains available.",
